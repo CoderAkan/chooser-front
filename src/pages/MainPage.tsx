@@ -2,18 +2,19 @@ import { FC, useState, useEffect, useRef } from 'react'
 import { Logo, Settings } from '../components/icons'
 import { NavLink } from 'react-router-dom'
 import { store } from '../store/store';
-import { useAppDispatch } from '../store/hooks';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { ModalWindow, setMainNumberOfPlayers, setNumberOfPlayers } from '../store/User/userSlice';
 import TaskWindow from '../components/taskWindow';
 import { tasks } from '../service/getTask';
 import { filterTask, windowTask } from '../types/type';
-import { getNumberOfPlayersFromTheLocalStorage } from '../helpers/localstorage.helper';
+import { getNumberOfPlayersFromTheLocalStorage, setNumberOfPlayersFromTheLocalStorage } from '../helpers/localstorage.helper';
 
 
 const MainPage: FC = () => {
   const state = store.getState();
   const dispatch = useAppDispatch();
-  const numberOfPlayers = getNumberOfPlayersFromTheLocalStorage();
+  // Use useAppSelector to get the latest state
+  const currentNumberOfPlayers = useAppSelector(state => state.user.numberOfPlayers);
   const elimination = state.user.elimination;
   const colors_300 = ['bg-red-300', 'bg-blue-300', 'bg-green-300', 'bg-pink-300', 'bg-yellow-300', 'bg-orange-300', 'bg-teal-300', 'bg-lime-300']
   const colors_500 = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-pink-500', 'bg-yellow-500', 'bg-orange-500', 'bg-teal-500', 'bg-lime-500']
@@ -47,7 +48,7 @@ const MainPage: FC = () => {
       time_to_do: state.user.time_to_do
     };
     try {
-      const response = await fetch('http://localhost:3000/api/task', {
+      const response = await fetch('http://localhost:3000/api/task/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -207,13 +208,15 @@ const MainPage: FC = () => {
 
   useEffect(() => {
     // Check if player count has reached zero
-    if (numberOfPlayers <= 0) {
+    if (currentNumberOfPlayers <= 0) {
       // Reset to original player count
-      dispatch(setNumberOfPlayers(state.user.mainNumberOfPlayers));
+      dispatch(setNumberOfPlayers(originalPlayerCountRef.current));
+      // Update localStorage too
+      setNumberOfPlayersFromTheLocalStorage("players", originalPlayerCountRef.current);
     }
     
     return () => {
-        playingAgain()
+      playingAgain();
       // Cleanup on component unmount
       if (modalTimeoutRef.current) {
         clearTimeout(modalTimeoutRef.current);
@@ -221,12 +224,19 @@ const MainPage: FC = () => {
       Object.values(holdTimersRef.current).forEach(timer => clearTimeout(timer));
       Object.values(countdownIntervalsRef.current).forEach(interval => clearInterval(interval));
     };
-  }, [numberOfPlayers, dispatch]);
-
+  }, [currentNumberOfPlayers, dispatch]);
 
   const handleWontComplete = () => {
-    // Reduce player count
-    dispatch(setNumberOfPlayers(numberOfPlayers - 1));
+    // Calculate new player count
+    const newPlayerCount = currentNumberOfPlayers > 1 ? currentNumberOfPlayers - 1 : 1;
+    
+    // Dispatch action to update Redux store
+    dispatch(setNumberOfPlayers(newPlayerCount));
+    
+    // Also update localStorage to persist the change
+    setNumberOfPlayersFromTheLocalStorage("players", newPlayerCount);
+    
+    // Close modal and reset game state
     setShowCompletionModal(false);
     playingAgain();
   };
@@ -249,12 +259,12 @@ const MainPage: FC = () => {
             </NavLink>
         </div>
         <div className={`grid gap-8 mb-auto mx-4 ${
-            numberOfPlayers <= 2 ? 'grid-cols-2 grid-rows-1' :
-            numberOfPlayers <= 4 ? 'grid-cols-2 grid-rows-2' :
-            numberOfPlayers <= 6 ? 'grid-cols-2 grid-rows-3' :
+            currentNumberOfPlayers <= 2 ? 'grid-cols-2 grid-rows-1' :
+            currentNumberOfPlayers <= 4 ? 'grid-cols-2 grid-rows-2' :
+            currentNumberOfPlayers <= 6 ? 'grid-cols-2 grid-rows-3' :
             'grid-cols-2 grid-rows-4'
         }`}>
-            {Array.from({length: numberOfPlayers}).map((_, index) => (
+            {Array.from({length: currentNumberOfPlayers}).map((_, index) => (
                 <div 
                     key={index}
                     onMouseDown={() => handleMouseDown(index)}
